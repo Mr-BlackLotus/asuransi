@@ -7,7 +7,7 @@
 <title>Report Asuransi</title>
 <style>
   :root {
-    --bg:#f4f6fb; --card:#fff; --text:#1c2333; --muted:#6b7385; --line:#dfe3ee;
+    --bg:#f4f6fb; --card:#fff; --text:#1c2333; --muted:#6b7385; --line:#dfe3ee; --grid:#e8ebf3;
     --primary:#1a56db; --primary-d:#1445b3; --ok:#0f8a4b; --warn:#b45309; --err:#c81e1e;
   }
   * { box-sizing:border-box; }
@@ -21,10 +21,10 @@
   label:first-child { margin-top:0; }
   label small { font-weight:400; color:var(--muted); }
   label .req { color:var(--err); }
-  input[type=text], input[type=tel], input[type=search] {
-    width:100%; padding:12px; font-size:1rem; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--text);
+  input[type=text], input[type=tel], input[type=search], select {
+    width:100%; padding:12px; font-size:1rem; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--text); font-family:inherit;
   }
-  input:focus { outline:2px solid var(--primary); border-color:transparent; }
+  input:focus, select:focus { outline:2px solid var(--primary); border-color:transparent; }
   .rp { position:relative; }
   .rp span { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-weight:600; }
   .rp input { padding-left:42px; }
@@ -54,6 +54,33 @@
   .head { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
   .head h2 { font-size:1rem; margin:0; }
   .head .links a { font-size:.85rem; color:var(--primary); text-decoration:none; margin-left:12px; }
+  .month-pick { display:flex; align-items:center; gap:8px; }
+  .month-pick label { margin:0; font-weight:600; }
+  .month-pick select { width:auto; min-width:170px; padding:9px 12px; font-size:.95rem; }
+
+  /* ringkasan */
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .tile { border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .tile .k { color:var(--muted); font-size:.78rem; }
+  .tile .v { font-size:1.5rem; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .tile .v.sm-v { font-size:1.15rem; padding-top:6px; }
+  .tile .s { color:var(--muted); font-size:.78rem; margin-top:2px; }
+  .chart-title { font-size:.9rem; font-weight:600; margin:4px 0 2px; }
+  .chart-note { color:var(--muted); font-size:.8rem; margin-bottom:6px; }
+  .chart { position:relative; margin-bottom:14px; }
+  .chart svg { width:100%; height:auto; display:block; }
+  .chart .grid { stroke:var(--grid); stroke-width:1; }
+  .chart .grid.base { stroke:#c9cfdd; }
+  .chart .ax { font-size:11px; fill:var(--muted); }
+  .chart .ax.on { fill:var(--text); font-weight:700; }
+  .chart .val { font-size:11px; fill:var(--text); font-weight:600; text-anchor:middle; }
+  .chart .bar { fill:var(--primary); }
+  .chart .bar.dim { fill:#9db7ee; }
+  .chart .hit { fill:transparent; }
+  .chart.pick .hit { cursor:pointer; }
+  .chart .hit:hover + .nothing { }
+  .tip { position:absolute; pointer-events:none; background:#1c2333; color:#fff; font-size:.8rem; padding:6px 9px; border-radius:8px; white-space:nowrap; transform:translateX(-50%); display:none; z-index:5; }
+
   .tools { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
   .tools input[type=search] { flex:1; min-width:180px; padding:10px 12px; font-size:.95rem; }
   .tools label { margin:0; font-weight:500; display:flex; align-items:center; gap:6px; white-space:nowrap; }
@@ -73,6 +100,12 @@
   .ek-cell .flash { font-size:.8rem; color:var(--ok); white-space:nowrap; }
   .ek-cell .flash.err { color:var(--err); }
   .empty { color:var(--muted); font-size:.9rem; padding:12px 0; }
+
+  @media (max-width:640px) {
+    .tiles { grid-template-columns:repeat(2,1fr); }
+    .month-pick { width:100%; }
+    .month-pick select { flex:1; }
+  }
 </style>
 </head>
 <body>
@@ -98,9 +131,30 @@
     <div class="msg" id="msg"></div>
   </form>
 
+  <div class="card" id="summaryCard">
+    <div class="head">
+      <h2>Ringkasan</h2>
+      <div class="month-pick">
+        <label for="month">Bulan</label>
+        <select id="month"></select>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+
+    <div class="chart-title">Jumlah data per bulan</div>
+    <div class="chart-note">Klik batang untuk memilih bulan.</div>
+    <div class="chart pick" id="chartMonth"></div>
+
+    <div id="dayBlock">
+      <div class="chart-title" id="dayTitle"></div>
+      <div class="chart-note">Jumlah data yang diinput tiap hari.</div>
+      <div class="chart" id="chartDay"></div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="head">
-      <h2>Semua data</h2>
+      <h2>Data</h2>
       <div class="links">
         <a href="#" id="reload">Muat ulang</a>
         <a href="https://docs.google.com/spreadsheets/d/14FIH5zkBPqYbOO_vi2Hgx-R1HBgmnmQPeAjnm6S8Mtw/edit" target="_blank" rel="noopener">Buka Sheet</a>
@@ -118,7 +172,11 @@
 <script>
   var photoData = null;   // {base64, mime, dataUrl}
   var allItems = [];
+  var firstLoad = true;
   var $ = function (id) { return document.getElementById(id); };
+
+  var MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  var MON_S  = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -127,6 +185,7 @@
   }
   function rupiah(n) { return 'Rp' + Number(n).toLocaleString('id-ID'); }
   function show(text, type) { var m = $('msg'); m.textContent = text; m.className = 'msg ' + type; }
+  function pad(n) { return ('0' + n).slice(-2); }
 
   // ================= FOTO (opsional: pilih, ganti, hapus) =================
   function renderPhotoBox() {
@@ -228,12 +287,174 @@
       .checkDuplicate(noMP, noEK);
   });
 
-  // ================= TABEL SEMUA DATA =================
+  // ================= BULAN =================
+  function curYM() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
+  function ymLabel(ym) { var p = ym.split('-'); return MONTHS[+p[1] - 1] + ' ' + p[0]; }
+  function ymShort(ym) { var p = ym.split('-'); return MON_S[+p[1] - 1] + ' ' + p[0].slice(2); }
+  function selMonth() { return $('month').value || 'all'; }
+
+  // daftar bulan berurutan (naik) dari data paling awal sampai bulan ini / data paling akhir
+  function monthRange() {
+    var cur = curYM();
+    var yms = allItems.map(function (i) { return (i.tgl || '').slice(0, 7); })
+      .filter(Boolean).sort();
+    var first = yms.length ? yms[0] : cur;
+    var last = yms.length && yms[yms.length - 1] > cur ? yms[yms.length - 1] : cur;
+    if (first > cur) first = cur;
+    var out = [], y = +first.slice(0, 4), m = +first.slice(5, 7), guard = 0;
+    while ((y + '-' + pad(m)) <= last && guard++ < 600) {
+      out.push(y + '-' + pad(m));
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return out;
+  }
+
+  function fillMonthSelect() {
+    var keep = firstLoad ? curYM() : selMonth();
+    var range = monthRange().slice().reverse();
+    var html = '<option value="all">Semua bulan</option>' + range.map(function (ym) {
+      return '<option value="' + ym + '">' + ymLabel(ym) + '</option>';
+    }).join('');
+    $('month').innerHTML = html;
+    $('month').value = (keep === 'all' || range.indexOf(keep) >= 0) ? keep : curYM();
+    firstLoad = false;
+  }
+
+  function monthItems() {
+    var sel = selMonth();
+    if (sel === 'all') return allItems;
+    return allItems.filter(function (it) { return (it.tgl || '').indexOf(sel) === 0; });
+  }
+
+  $('month').addEventListener('change', function () { renderSummary(); renderTable(); });
+
+  // gambar ulang chart bila lebar layar berubah (mis. HP diputar)
+  var lastW = window.innerWidth, resizeTimer;
+  window.addEventListener('resize', function () {
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { if (allItems.length) renderSummary(); }, 150);
+  });
+
+  // ================= RINGKASAN: kartu angka + chart =================
+  function renderSummary() {
+    var items = monthItems();
+    var sel = selMonth();
+    var sum = items.reduce(function (a, it) { return a + it.nominal; }, 0);
+    var ekFilled = items.filter(function (it) { return it.noEK; }).length;
+    var ekEmpty = items.length - ekFilled;
+    var label = sel === 'all' ? 'Semua bulan' : ymLabel(sel);
+
+    $('tiles').innerHTML =
+      tile('Asuransi diinput', String(items.length), label) +
+      tile('Total nominal', rupiah(sum), label, true) +
+      tile('No EK terisi', String(ekFilled), items.length ? Math.round(ekFilled / items.length * 100) + '% dari data' : '') +
+      tile('No EK belum diisi', String(ekEmpty), ekEmpty ? 'perlu dilengkapi' : (items.length ? 'semua lengkap' : ''));
+
+    // chart per bulan (maksimal 12 bulan terakhir)
+    var range = monthRange(); if (range.length > 12) range = range.slice(range.length - 12);
+    var counts = {};
+    allItems.forEach(function (it) { var k = (it.tgl || '').slice(0, 7); if (k) counts[k] = (counts[k] || 0) + 1; });
+    var vals = range.map(function (ym) { return counts[ym] || 0; });
+    barChart($('chartMonth'), {
+      values: vals,
+      ticks: range.map(ymShort),
+      tips: range.map(function (ym, i) { return ymLabel(ym) + ': ' + vals[i] + ' data'; }),
+      selected: sel === 'all' ? -1 : range.indexOf(sel),
+      labels: 'all',
+      thin: true,
+      aria: 'Jumlah data per bulan',
+      onPick: function (i) { $('month').value = range[i]; renderSummary(); renderTable(); }
+    });
+
+    // chart per hari (hanya jika satu bulan dipilih)
+    if (sel === 'all') { $('dayBlock').style.display = 'none'; return; }
+    $('dayBlock').style.display = '';
+    $('dayTitle').textContent = 'Jumlah data per hari, ' + ymLabel(sel);
+    var y = +sel.slice(0, 4), m = +sel.slice(5, 7), days = new Date(y, m, 0).getDate();
+    var perDay = []; for (var d = 0; d < days; d++) perDay.push(0);
+    items.forEach(function (it) { var dd = parseInt((it.tgl || '').slice(8, 10), 10); if (dd >= 1 && dd <= days) perDay[dd - 1]++; });
+    var nonZero = perDay.filter(function (v) { return v > 0; }).length;
+    barChart($('chartDay'), {
+      values: perDay,
+      ticks: perDay.map(function (v, i) { var n = i + 1; return (n === 1 || (n % 5 === 0 && n <= days - 3) || n === days) ? String(n) : ''; }),
+      tips: perDay.map(function (v, i) { return (i + 1) + ' ' + MONTHS[m - 1] + ' ' + y + ': ' + v + ' data'; }),
+      selected: -1,
+      labels: nonZero <= 12 ? 'all' : 'none',
+      aria: 'Jumlah data per hari di ' + ymLabel(sel)
+    });
+  }
+  function tile(k, v, s, small) {
+    return '<div class="tile"><div class="k">' + esc(k) + '</div><div class="v' + (small ? ' sm-v' : '') + '">' + esc(v) +
+      '</div><div class="s">' + esc(s || ' ') + '</div></div>';
+  }
+
+  // Chart batang SVG buatan sendiri (satu seri, satu sumbu, tooltip saat hover/tap)
+  function niceScale(max) {
+    if (max <= 4) return { top: 4, step: 1 };
+    var raw = max / 4, pow = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10)), f = raw / pow;
+    var s = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10, step = s * pow;
+    return { top: step * 4, step: step };
+  }
+  function barChart(el, o) {
+    var W = Math.max(280, Math.round(el.clientWidth || 640)), H = 210, L = 34, R = 8, T = 18, B = 28, pw = W - L - R, ph = H - T - B, n = o.values.length;
+    var max = Math.max.apply(null, o.values.concat([0])), sc = niceScale(max);
+    var band = pw / n, bw = Math.min(band * 0.62, 30), i, s = '';
+    // di layar sempit, label sumbu-x dijarangkan agar tidak bertumpuk (label terakhir selalu tampil)
+    var tickStep = o.thin ? Math.max(1, Math.ceil(46 / band)) : 1;
+    s += '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.aria) + '">';
+    for (var g = 0; g <= 4; g++) {
+      var gv = sc.step * g, gy = T + ph - (gv / sc.top) * ph;
+      s += '<line class="grid' + (g === 0 ? ' base' : '') + '" x1="' + L + '" x2="' + (W - R) + '" y1="' + gy + '" y2="' + gy + '"/>';
+      s += '<text class="ax" x="' + (L - 6) + '" y="' + (gy + 4) + '" text-anchor="end">' + gv + '</text>';
+    }
+    for (i = 0; i < n; i++) {
+      var v = o.values[i], x = L + band * i + (band - bw) / 2, h = (v / sc.top) * ph, y = T + ph - h;
+      var dim = o.selected >= 0 && i !== o.selected, on = o.selected === i;
+      if (h > 0) {
+        var r = Math.min(4, h, bw / 2);
+        s += '<path class="bar' + (dim ? ' dim' : '') + '" d="M' + x + ',' + (y + h) + ' V' + (y + r) + ' Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+          ' H' + (x + bw - r) + ' Q' + (x + bw) + ',' + y + ' ' + (x + bw) + ',' + (y + r) + ' V' + (y + h) + ' Z"/>';
+        if (o.labels === 'all') s += '<text class="val" x="' + (x + bw / 2) + '" y="' + (y - 5) + '">' + v + '</text>';
+      }
+      if (o.ticks[i] && (i % tickStep) === ((n - 1) % tickStep)) s += '<text class="ax' + (on ? ' on' : '') + '" x="' + (x + bw / 2) + '" y="' + (H - 9) + '" text-anchor="middle">' + esc(o.ticks[i]) + '</text>';
+      s += '<rect class="hit" data-i="' + i + '" x="' + (L + band * i) + '" y="' + T + '" width="' + band + '" height="' + ph + '"/>';
+    }
+    s += '</svg><div class="tip"></div>';
+    el.innerHTML = s;
+
+    var tip = el.querySelector('.tip');
+    var hits = el.querySelectorAll('.hit');
+    Array.prototype.forEach.call(hits, function (hit) {
+      var idx = +hit.getAttribute('data-i');
+      function showTip() {
+        var cr = el.getBoundingClientRect(), hr = hit.getBoundingClientRect();
+        tip.textContent = o.tips[idx];
+        tip.style.display = 'block';
+        var left = hr.left - cr.left + hr.width / 2;
+        var half = tip.offsetWidth / 2;
+        left = Math.max(half, Math.min(cr.width - half, left));
+        tip.style.left = left + 'px';
+        tip.style.top = (hr.top - cr.top + 2) + 'px';
+      }
+      hit.addEventListener('mouseenter', showTip);
+      hit.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+      hit.addEventListener('click', function () { if (o.onPick) o.onPick(idx); else showTip(); });
+    });
+  }
+
+  // ================= TABEL DATA =================
   function loadAll() {
     $('list').className = 'empty'; $('list').textContent = 'Memuat…';
     google.script.run
       .withFailureHandler(function () { $('list').textContent = 'Tidak bisa memuat data.'; })
-      .withSuccessHandler(function (res) { allItems = res.items || []; renderTable(); })
+      .withSuccessHandler(function (res) {
+        allItems = res.items || [];
+        fillMonthSelect();
+        renderSummary();
+        renderTable();
+      })
       .getAll();
   }
   $('reload').addEventListener('click', function (e) { e.preventDefault(); loadAll(); });
@@ -243,23 +464,29 @@
   function filtered() {
     var q = $('q').value.trim().toLowerCase();
     var only = $('onlyNoEK').checked;
-    return allItems.filter(function (it) {
+    return monthItems().filter(function (it) {
       if (only && it.noEK) return false;
       if (q && it.noMP.toLowerCase().indexOf(q) < 0 && it.noEK.toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
   }
 
+  function updateSummaryText() {
+    var base = monthItems(), items = filtered();
+    var sum = items.reduce(function (a, it) { return a + it.nominal; }, 0);
+    var kosong = base.filter(function (it) { return !it.noEK; }).length;
+    var sel = selMonth();
+    $('summary').textContent = base.length
+      ? (sel === 'all' ? 'Semua bulan' : ymLabel(sel)) + ': ' + items.length + ' dari ' + base.length + ' data · Total ' + rupiah(sum) + ' · EK belum diisi: ' + kosong
+      : '';
+  }
+
   function renderTable() {
     var items = filtered();
-    var sum = items.reduce(function (a, it) { return a + it.nominal; }, 0);
-    var kosong = allItems.filter(function (it) { return !it.noEK; }).length;
-    $('summary').textContent = allItems.length
-      ? items.length + ' dari ' + allItems.length + ' data · Total ' + rupiah(sum) + ' · EK belum diisi: ' + kosong
-      : '';
+    updateSummaryText();
     if (!items.length) {
       $('list').className = 'empty';
-      $('list').textContent = allItems.length ? 'Tidak ada data yang cocok.' : 'Belum ada data.';
+      $('list').textContent = monthItems().length ? 'Tidak ada data yang cocok.' : (allItems.length ? 'Belum ada data di bulan ini.' : 'Belum ada data.');
       return;
     }
     $('list').className = '';
@@ -334,8 +561,8 @@
         p.btn.hidden = true;
         p.flash.className = 'flash'; p.flash.textContent = 'Tersimpan ✔';
         allItems.forEach(function (it) { if (it.row === row) it.noEK = res.noEK; });
-        var kosong = allItems.filter(function (it) { return !it.noEK; }).length;
-        $('summary').textContent = $('summary').textContent.replace(/EK belum diisi: \d+/, 'EK belum diisi: ' + kosong);
+        updateSummaryText();
+        renderSummary();   // kartu "No EK terisi / belum diisi" ikut berubah
       })
       .updateEK(row, mp, val, !!force);
   }

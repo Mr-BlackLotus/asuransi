@@ -11,6 +11,8 @@ Kolom yang diinput:
 
 Semua data yang sudah diinput tampil di tabel dalam aplikasi, lengkap dengan pencarian dan filter "EK kosong".
 
+Ringkasan per bulan: pilih bulan untuk melihat berapa banyak asuransi yang diinput, total nominal, serta jumlah No EK yang sudah dan belum diisi. Ada chart jumlah data per bulan (klik batang untuk pindah bulan) dan chart per hari di bulan terpilih. Tabel di bawahnya ikut menampilkan bulan yang dipilih.
+
 ## Isi repo
 
 - `Code.gs` : backend. Menyimpan baris baru ke Sheet, foto ke folder Drive "Foto Report Asuransi", cek data ganda, mengambil semua data, dan mengubah No Invoice EK.

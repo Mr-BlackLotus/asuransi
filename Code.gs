@@ -101,6 +101,17 @@ function saveEntry(data) {
   }
 }
 
+/** Ubah isi sel tanggal menjadi 'yyyy-MM-dd' (kosong jika tidak terbaca). */
+function isoDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Jakarta', 'yyyy-MM-dd');
+  const s = String(v || '');
+  let m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); // dd/MM/yyyy
+  if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+  return '';
+}
+
 /** Ambil semua data (terbaru di atas) untuk ditampilkan di aplikasi. */
 function getAll() {
   const sheet = getSheet_();
@@ -114,6 +125,7 @@ function getAll() {
     const m = link.match(/\/d\/([^\/?]+)/);
     items.push({
       row: i + 2,
+      tgl: isoDate_(r[0]),
       tanggal: r[0] instanceof Date
         ? Utilities.formatDate(r[0], 'Asia/Jakarta', 'dd/MM/yyyy HH:mm') : String(r[0] || ''),
       nominal: Number(r[2]) || 0,
