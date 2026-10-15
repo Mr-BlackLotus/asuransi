@@ -2,11 +2,18 @@
 
 Aplikasi web (Google Apps Script) untuk mencatat report asuransi ke Google Sheet dan Google Drive.
 
-Kolom yang diinput: **Foto**, **Nominal**, **No Pesanan MP**, **No Invoice EK**.
+Kolom yang diinput:
+
+- **Nominal** : wajib
+- **No Pesanan MP** : wajib
+- **Foto** : opsional (bisa diganti atau dihapus sebelum disimpan)
+- **No Invoice EK** : opsional (bisa diisi atau diubah nanti langsung di tabel aplikasi)
+
+Semua data yang sudah diinput tampil di tabel dalam aplikasi, lengkap dengan pencarian dan filter "EK kosong".
 
 ## Isi repo
 
-- `Code.gs` : backend. Menyimpan baris baru ke Sheet, foto ke folder Drive "Foto Report Asuransi", cek data ganda, dan menampilkan data terakhir.
+- `Code.gs` : backend. Menyimpan baris baru ke Sheet, foto ke folder Drive "Foto Report Asuransi", cek data ganda, mengambil semua data, dan mengubah No Invoice EK.
 - `index.html` : tampilan form (ramah HP).
 
 ## Cara pasang

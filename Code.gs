@@ -1,6 +1,7 @@
 /**
  * Report Asuransi - backend Google Apps Script
- * Menyimpan: Foto, Nominal, No Pesanan MP, No Invoice EK ke Google Sheet + Google Drive.
+ * Kolom: Foto (opsional), Nominal (wajib), No Pesanan MP (wajib), No Invoice EK (opsional).
+ * Data disimpan ke Google Sheet, foto disimpan ke Google Drive.
  */
 
 const SHEET_ID = '14FIH5zkBPqYbOO_vi2Hgx-R1HBgmnmQPeAjnm6S8Mtw';
@@ -36,79 +37,129 @@ function getFolder_() {
   return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);
 }
 
-/** Cek apakah No MP / No EK sudah pernah diinput. */
+function norm_(s) {
+  return String(s == null ? '' : s).trim().toLowerCase();
+}
+
+/** Cek apakah No MP / No EK sudah pernah diinput (EK kosong tidak dicek). */
 function checkDuplicate(noMP, noEK) {
   const sheet = getSheet_();
   const last = sheet.getLastRow();
   if (last < 2) return { mp: false, ek: false };
   const vals = sheet.getRange(2, 4, last - 1, 2).getValues();
-  const mp = String(noMP).trim().toLowerCase();
-  const ek = String(noEK).trim().toLowerCase();
+  const mp = norm_(noMP);
+  const ek = norm_(noEK);
   let dupMP = false, dupEK = false;
   vals.forEach(function (r) {
-    if (mp && String(r[0]).trim().toLowerCase() === mp) dupMP = true;
-    if (ek && String(r[1]).trim().toLowerCase() === ek) dupEK = true;
+    if (mp && norm_(r[0]) === mp) dupMP = true;
+    if (ek && norm_(r[1]) === ek) dupEK = true;
   });
   return { mp: dupMP, ek: dupEK };
 }
 
-/** Simpan satu data baru ke baris berikutnya. */
+/** Simpan satu data baru ke baris berikutnya. Foto dan EK boleh kosong. */
 function saveEntry(data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     const nominal = Number(data.nominal);
     if (!nominal || nominal <= 0) throw new Error('Nominal tidak valid');
-    if (!data.noMP || !data.noEK) throw new Error('No Pesanan MP dan No Invoice EK wajib diisi');
-    if (!data.photoBase64) throw new Error('Foto wajib diisi');
+    const noMP = String(data.noMP || '').trim();
+    if (!noMP) throw new Error('No Pesanan MP wajib diisi');
+    const noEK = String(data.noEK || '').trim();
 
     const sheet = getSheet_();
 
-    // 1) Simpan foto ke Drive
-    const bytes = Utilities.base64Decode(data.photoBase64);
-    const stamp = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyyMMdd_HHmmss');
-    const safeMP = String(data.noMP).replace(/[^\w\-]/g, '_');
-    const blob = Utilities.newBlob(bytes, data.mime || 'image/jpeg', stamp + '_' + safeMP + '.jpg');
-    const file = getFolder_().createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    const id = file.getId();
-    const viewUrl = 'https://drive.google.com/file/d/' + id + '/view';
-    const thumbUrl = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400';
+    // 1) Foto (opsional) -> simpan ke Drive
+    let viewUrl = '', thumbUrl = '';
+    if (data.photoBase64) {
+      const bytes = Utilities.base64Decode(data.photoBase64);
+      const stamp = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyyMMdd_HHmmss');
+      const safeMP = noMP.replace(/[^\w\-]/g, '_');
+      const blob = Utilities.newBlob(bytes, data.mime || 'image/jpeg', stamp + '_' + safeMP + '.jpg');
+      const file = getFolder_().createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const id = file.getId();
+      viewUrl = 'https://drive.google.com/file/d/' + id + '/view';
+      thumbUrl = 'https://drive.google.com/thumbnail?id=' + id + '&sz=w400';
+    }
 
     // 2) Tambah baris ke Sheet
     const row = sheet.getLastRow() + 1;
     sheet.getRange(row, 1).setValue(new Date()).setNumberFormat('dd/MM/yyyy HH:mm');
-    sheet.getRange(row, 2).setFormula('=IMAGE("' + thumbUrl + '")');
+    if (thumbUrl) sheet.getRange(row, 2).setFormula('=IMAGE("' + thumbUrl + '")');
     sheet.getRange(row, 3).setValue(nominal).setNumberFormat('"Rp"#,##0');
-    sheet.getRange(row, 4).setNumberFormat('@').setValue(String(data.noMP).trim());
-    sheet.getRange(row, 5).setNumberFormat('@').setValue(String(data.noEK).trim());
-    sheet.getRange(row, 6).setValue(viewUrl);
-    sheet.setRowHeight(row, 110);
+    sheet.getRange(row, 4).setNumberFormat('@').setValue(noMP);
+    sheet.getRange(row, 5).setNumberFormat('@').setValue(noEK);
+    if (viewUrl) sheet.getRange(row, 6).setValue(viewUrl);
+    if (thumbUrl) sheet.setRowHeight(row, 110);
     sheet.getRange(row, 1, 1, HEADERS.length).setVerticalAlignment('middle');
 
-    return { ok: true, row: row, url: viewUrl };
+    return { ok: true, row: row };
   } finally {
     lock.releaseLock();
   }
 }
 
-/** Ambil data terakhir untuk ditampilkan di aplikasi. */
-function getRecent(limit) {
+/** Ambil semua data (terbaru di atas) untuk ditampilkan di aplikasi. */
+function getAll() {
   const sheet = getSheet_();
   const last = sheet.getLastRow();
-  if (last < 2) return { items: [], total: 0 };
-  const n = Math.min(limit || 10, last - 1);
-  const start = last - n + 1;
-  const vals = sheet.getRange(start, 1, n, 6).getValues();
-  const items = vals.map(function (r) {
-    return {
+  if (last < 2) return { items: [] };
+  const vals = sheet.getRange(2, 1, last - 1, 6).getValues();
+  const items = [];
+  vals.forEach(function (r, i) {
+    if (!r[2] && !r[3] && !r[4]) return; // lewati baris kosong
+    const link = String(r[5] || '');
+    const m = link.match(/\/d\/([^\/?]+)/);
+    items.push({
+      row: i + 2,
       tanggal: r[0] instanceof Date
-        ? Utilities.formatDate(r[0], 'Asia/Jakarta', 'dd/MM/yyyy HH:mm') : String(r[0]),
+        ? Utilities.formatDate(r[0], 'Asia/Jakarta', 'dd/MM/yyyy HH:mm') : String(r[0] || ''),
       nominal: Number(r[2]) || 0,
-      noMP: String(r[3]),
-      noEK: String(r[4]),
-      link: String(r[5])
-    };
-  }).reverse();
-  return { items: items, total: last - 1 };
+      noMP: String(r[3] || ''),
+      noEK: String(r[4] || ''),
+      link: link,
+      fileId: m ? m[1] : ''
+    });
+  });
+  items.reverse();
+  return { items: items };
+}
+
+/**
+ * Ubah No Invoice EK pada satu baris.
+ * noMP dipakai sebagai pengaman: kalau baris di Sheet sudah bergeser/berubah, perubahan ditolak.
+ * Jika EK baru sudah dipakai baris lain dan force != true, kembalikan {ok:false, dup:true}.
+ */
+function updateEK(row, noMP, newEK, force) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = getSheet_();
+    row = Number(row);
+    if (!row || row < 2 || row > sheet.getLastRow()) {
+      throw new Error('Baris tidak ditemukan, muat ulang halaman.');
+    }
+    const currentMP = String(sheet.getRange(row, 4).getValue()).trim();
+    if (currentMP !== String(noMP).trim()) {
+      throw new Error('Data di Sheet sudah berubah, muat ulang halaman.');
+    }
+    const ek = String(newEK == null ? '' : newEK).trim();
+
+    if (ek && !force) {
+      const last = sheet.getLastRow();
+      const eks = sheet.getRange(2, 5, last - 1, 1).getValues();
+      for (let i = 0; i < eks.length; i++) {
+        if (i + 2 !== row && norm_(eks[i][0]) === norm_(ek)) {
+          return { ok: false, dup: true };
+        }
+      }
+    }
+
+    sheet.getRange(row, 5).setNumberFormat('@').setValue(ek);
+    return { ok: true, noEK: ek };
+  } finally {
+    lock.releaseLock();
+  }
 }
